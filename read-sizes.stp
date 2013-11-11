@@ -1,0 +1,25 @@
+#!/usr/bin/env stap 
+#
+# show histogramm of read sizes
+#
+
+global target_pid;
+global reads;
+
+probe begin {
+  target_pid = target();
+}
+
+probe vfs.read.return {
+  if (target_pid == pid()) {
+    namestr = $file->f_path->dentry->d_name->name;
+    reads[kernel_string(namestr)] <<< bytes_read;
+  }
+}
+
+probe end {
+   foreach (f in reads+) {
+      printf("File: %s\n", f);
+      print(@hist_log(reads[f]));
+   }
+}
