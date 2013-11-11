@@ -1,0 +1,46 @@
+#!/usr/bin/env stap 
+
+#
+# vfs trace
+#
+
+global target_pid;
+global start_time;
+
+function timestamp:long() { 
+    now = gettimeofday_ns();
+	delta = now - start_time;
+    start_time = now;
+    return delta;
+}
+
+
+function ppos_pos:long (ppos:long)
+{
+	return kernel_pointer(ppos)
+}
+
+probe begin {
+  target_pid = target()
+  start_time = gettimeofday_ns();
+
+  printf("%8s  %32s  %6s  %6s  %12s  %12s  %12s\n",
+     "ns", "name", "dev", "ftype", "ino", "pos", "count");
+}
+
+probe vfs.read {
+  if (target_pid == pid()) {
+
+    fstypep = $file->f_path->dentry->d_inode->i_sb->s_type->name;
+    namestr = $file->f_path->dentry->d_name->name;
+
+    printf("%8d, %32s  %6s, %6s, %12d, %12d, %12d\n",
+           timestamp(),
+           kernel_string(namestr),
+           devname,
+           kernel_string(fstypep),
+           ino,
+           ppos_pos(pos),
+           bytes_to_read)
+  }
+}
