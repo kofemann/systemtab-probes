@@ -1,0 +1,38 @@
+#!/usr/bin/env stap 
+#
+# show histogramm of read sizes
+#
+
+global target_pid;
+global file_offsets;
+global read_offsets;
+
+function ppos_pos:long (ppos:long)
+{
+	return kernel_pointer(ppos)
+}
+
+probe begin {
+  target_pid = target();
+}
+
+probe vfs.read.return {
+  if (target_pid == pid() || target_pid == ppid()) {
+
+    namestr = $file->f_path->dentry->d_name->name;
+    fname = kernel_string(namestr);
+    last_offset = file_offsets[fname];
+
+    # as we are at return, calculate position of read request
+    current_offset = ppos_pos(pos) - bytes_read;
+    read_offsets[fname] <<< current_offset - last_offset;
+    file_offsets[fname] = ppos_pos(pos);
+  }
+}
+
+probe end {
+   foreach (f in read_offsets+) {
+      printf("File: %s\n", f);
+      print(@hist_log(read_offsets[f]));
+   }
+}
