@@ -11,7 +11,7 @@ probe begin {
 }
 
 probe vfs.read.return {
-  if (target_pid == pid()) {
+  if (target_pid == pid() || target_pid == ppid()) {
     namestr = $file->f_path->dentry->d_name->name;
     reads[kernel_string(namestr)] <<< bytes_read;
   }
