@@ -1,0 +1,60 @@
+#!/usr/bin/env stap
+#
+# trace java calltree.
+# Needs -XX:+ExtendedDTraceProbes option enabled.
+#
+# usage:
+#   $ ./java-calltree.stp -DSTP_NO_OVERLOAD org/bla/bla/ClassName#methodName
+#
+
+global times
+global traceit
+
+global start_with
+
+probe begin {
+  start_with = @1
+  printf("Watching for calls from %s\n", start_with);
+}
+
+function trace_in(entry_p, class, method) {
+       printf("%s%s%s#%s()\n",thread_indent(entry_p),
+                 (entry_p>0?"->":"<-"), class, method)
+}
+
+function trace_out(entry_p, class, method, delta) {
+       printf("%s%s%s#%s() took %8dus\n",thread_indent(entry_p),
+                 (entry_p>0?"->":"<-"), class, method, delta)
+}
+
+probe hotspot.method_entry {
+	   call = sprintf("%s#%s", class, method);
+	   if (!traceit[thread_id] && isinstr(start_with, call)) {
+		 traceit[thread_id] = 1
+       }
+}
+
+probe hotspot.method_entry {
+
+   if (traceit[thread_id]) {
+	   times[thread_id,traceit[thread_id]] = gettimeofday_us();
+	   trace_in(1, class, method)
+	   traceit[thread_id] += 1
+   }
+}
+
+probe hotspot.method_return {
+
+   if (traceit[thread_id]) {
+       traceit[thread_id] -= 1
+	   delta = gettimeofday_us() - times[thread_id,traceit[thread_id]];
+       trace_out(-1, class, method, delta)
+       delete times[thread_id,traceit[thread_id]]
+   }
+}
+
+probe hotspot.method_return {
+  if (traceit[thread_id] == 1) {
+       delete traceit[thread_id]
+  }
+}
